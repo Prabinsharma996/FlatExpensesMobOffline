@@ -14,7 +14,7 @@ jobs:
       contents: write
 
     steps:
-      - name:  checkout repository
+      - name: 📥 Checkout repository
         uses: actions/checkout@v4
 
       - name: ⚙️ Setup Node.js
@@ -30,46 +30,52 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: 📱 Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: 📦 Install dependencies
+      - name: 📦 Install npm dependencies
         working-directory: mobile
-        run: npm ci
+        run: npm install
 
       - name: 🚀 Expo Prebuild
         working-directory: mobile
         run: npx expo prebuild --platform android --clean
 
-      - name: 🔨 Build Release APK
+      - name: 🔑 Set Permissions & Build Standalone Release APK
         working-directory: mobile/android
-        run: ./gradlew assembleRelease --no-daemon
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+
+      - name: 📋 Prepare FlatSplit.apk Asset
+        run: |
+          mkdir -p release-artifacts
+          cp mobile/android/app/build/outputs/apk/release/app-release.apk release-artifacts/FlatSplit.apk
 
       - name: 📤 Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: FlatSplit-APK
-          path: mobile/android/app/build/outputs/apk/release/app-release.apk
+          name: FlatSplit-Release-APK
+          path: release-artifacts/FlatSplit.apk
 
-      - name: 🏷️ Create GitHub Release
+      - name: 🏷️ Publish GitHub Release with FlatSplit.apk
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          name: Release ${{ github.ref_name }} - FlatSplit Offline
+          name: Release ${{ github.ref_name }} - FlatSplit Offline APK
           body: |
-            ### 🚀 FlatSplit v1.0.0 Standalone Offline APK
+            ### 📱 FlatSplit Standalone Android APK (${{ github.ref_name }})
             
-            #### ✨ Key Features:
-            - **100% Offline-First Architecture**: No database or backend server required. Local AsyncStorage persistence.
-            - **Instant Vector QR Codes**: Crisp QR generation via `react-native-qrcode-svg`.
-            - **Live In-App Camera QR Scanner**: Scan roommate QR codes directly with `expo-camera`.
-            - **Peer-to-Peer Wi-Fi Sync**: Sync flats across devices on the same Wi-Fi network or hotspot.
-            - **Avatar & Name Profiles**: Instant profile setup without email/password friction.
-            - **Expense & Debt Simplification**: Split equally, exactly, or by percentage.
+            This is the standalone offline APK. You can download and install `FlatSplit.apk` directly onto any Android phone without needing a computer, dev server, or internet connection.
             
-            #### 📦 Download:
-            Download `FlatSplit.apk` below and install directly onto your Android phone.
-          files: mobile/android/app/build/outputs/apk/release/app-release.apk
+            #### ✨ Highlights:
+            - **100% Offline-First**: Local SQLite/AsyncStorage storage with debt simplification algorithms.
+            - **Instant Vector QR Codes**: Native SVG QR code generation without canvas dependencies.
+            - **Built-in Camera QR Scanner**: Fast peer syncing by pointing camera at roommate's screen.
+            - **Local Wi-Fi & Hotspot Sync**: Connect & sync across the same network.
+            - **Avatar & Name Profile System**: Instant setup with no email/password required.
+            
+            ---
+            ### ⬇️ Direct APK Download:
+            Download **`FlatSplit.apk`** under the **Assets** section below.
+          files: release-artifacts/FlatSplit.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
