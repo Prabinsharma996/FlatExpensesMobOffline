@@ -194,6 +194,7 @@ export default function TaskSpinWheelModal({
           description: `Wheel of Fate randomly assigned this task to ${winner.name}! 🎯`,
           category,
           difficulty,
+          taskType: "ONE_TIME",
           assignmentType: "MANUAL",
           assignedUserId: winner.userId,
         });
@@ -207,6 +208,7 @@ export default function TaskSpinWheelModal({
           description: `Wheel of Fate assigned task to guest "${winner.name}"! 🎯`,
           category,
           difficulty,
+          taskType: "ONE_TIME",
           assignmentType: "AUTO_FAIR",
         });
         Alert.alert(

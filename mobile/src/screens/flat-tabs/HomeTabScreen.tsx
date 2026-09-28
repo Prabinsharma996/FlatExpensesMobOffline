@@ -12,7 +12,7 @@ import SetBudgetModal from "../../components/SetBudgetModal";
 import { useFlat } from "../../context/FlatContext";
 import { BookApi, BudgetApi, BookBudgetData, FlatApi } from "../../api/endpoints";
 import { apiErrorMessage } from "../../api/client";
-import { Book, Expense, FlatReport } from "../../types";
+import { Book, CategoryBudget, Expense, FlatReport } from "../../types";
 import { Palette, colorForCategories } from "../../theme/colors";
 import { useTheme } from "../../theme/ThemeContext";
 import type { AppStackParamList } from "../../navigation/types";
@@ -251,7 +251,7 @@ export default function HomeTabScreen() {
                 {/* Smart Alert Banners */}
                 {budgetData.alerts.length > 0 && (
                   <View style={styles.alertStack}>
-                    {budgetData.alerts.map((alertText, idx) => (
+                    {budgetData.alerts.map((alertText: string, idx: number) => (
                       <View
                         key={idx}
                         style={[
@@ -310,7 +310,7 @@ export default function HomeTabScreen() {
 
                 {/* Category Breakdown list */}
                 <View style={styles.categoryBudgetList}>
-                  {budgetData.categories.map((c) => (
+                  {budgetData.categories.map((c: CategoryBudget) => (
                     <View key={c.category} style={styles.catBudgetRow}>
                       <View style={styles.catBudgetHeader}>
                         <Text style={[styles.catName, { color: colors.textPrimary }]}>{c.category}</Text>

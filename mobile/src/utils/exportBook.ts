@@ -7,7 +7,7 @@
  *   - expo-sharing to open the native share sheet
  */
 import { Alert } from "react-native";
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 import { BookDetail, LiveBalances, Settlement } from "../types";
 

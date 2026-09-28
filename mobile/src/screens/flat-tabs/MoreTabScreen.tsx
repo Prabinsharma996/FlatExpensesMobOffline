@@ -10,6 +10,8 @@ import BooksTabScreen from "./BooksTabScreen";
 import GlassCard from "../../components/GlassCard";
 import { useTheme } from "../../theme/ThemeContext";
 import { Palette } from "../../theme/colors";
+import WifiSyncModal from "../../offline/WifiSyncModal";
+import { useFlat } from "../../context/FlatContext";
 
 type FeatureKey = "menu" | "books" | "tasks" | "shopping" | "voting" | "members";
 
@@ -17,7 +19,9 @@ export default function MoreTabScreen() {
   const { colors } = useTheme();
   const styles = makeStyles(colors);
   const navigation = useNavigation<any>();
+  const { flatId, flatName } = useFlat();
   const [activeFeature, setActiveFeature] = useState<FeatureKey>("menu");
+  const [showSyncModal, setShowSyncModal] = useState(false);
 
   // Intercept hardware/device back button when inside a sub-feature to return to More menu
   useFocusEffect(
@@ -89,6 +93,34 @@ export default function MoreTabScreen() {
 
         {/* ── Vertical Features List ── */}
         <View style={styles.verticalList}>
+          {/* 0. Offline Wi-Fi P2P Sync */}
+          <TouchableOpacity
+            style={[
+              styles.featureCard,
+              { backgroundColor: colors.card, borderColor: colors.accent, borderWidth: 1.5 },
+            ]}
+            onPress={() => setShowSyncModal(true)}
+            activeOpacity={0.8}
+          >
+            <View style={[styles.iconWrap, { backgroundColor: colors.accentSoft }]}>
+              <Feather name="wifi" size={22} color={colors.accent} />
+            </View>
+            <View style={styles.featureInfo}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                <Text style={[styles.featureName, { color: colors.textPrimary }]}>
+                  Wi-Fi Peer Sync
+                </Text>
+                <View style={[styles.syncBadge, { backgroundColor: colors.accent }]}>
+                  <Text style={styles.syncBadgeText}>Offline P2P</Text>
+                </View>
+              </View>
+              <Text style={[styles.featureDesc, { color: colors.textSecondary }]}>
+                Sync all flat expenses with roommates over Wi-Fi
+              </Text>
+            </View>
+            <Feather name="chevron-right" size={20} color={colors.accent} />
+          </TouchableOpacity>
+
           {/* 1. Expense Books */}
           <TouchableOpacity
             style={[styles.featureCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}
@@ -129,7 +161,7 @@ export default function MoreTabScreen() {
             <Feather name="chevron-right" size={20} color={colors.textSecondary} />
           </TouchableOpacity>
 
-          {/* 2. Shared Shopping List */}
+          {/* 3. Shared Shopping List */}
           <TouchableOpacity
             style={[styles.featureCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}
             onPress={() => setActiveFeature("shopping")}
@@ -221,15 +253,15 @@ export default function MoreTabScreen() {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={[styles.appName, { color: colors.textPrimary }]}>FlatSplit</Text>
-              <Text style={[styles.appVersion, { color: colors.textSecondary }]}>Version 1.0.0</Text>
+              <Text style={[styles.appVersion, { color: colors.textSecondary }]}>Version 1.0.0 (Offline Mode)</Text>
             </View>
             <View style={[styles.statusTag, { backgroundColor: colors.accentSoft }]}>
-              <Text style={[styles.statusTagText, { color: colors.accent }]}>Official</Text>
+              <Text style={[styles.statusTagText, { color: colors.accent }]}>Offline-First</Text>
             </View>
           </View>
 
           <Text style={[styles.appBio, { color: colors.textSecondary }]}>
-            FlatSplit is a turn-based Roommate Chore Roster, Duty Scheduler, Shared Tasks & Expense Management app designed to divide the work and expenses of living together fairly.
+            FlatSplit is a turn-based Roommate Chore Roster, Duty Scheduler, Shared Tasks & Expense Management app designed to work 100% offline with zero external databases. All expenses synchronize peer-to-peer over local Wi-Fi.
           </Text>
 
           <View style={[styles.divider, { backgroundColor: colors.divider }]} />
@@ -262,6 +294,14 @@ export default function MoreTabScreen() {
           </View>
         </GlassCard>
       </ScrollView>
+
+      {/* Wi-Fi Sync Modal */}
+      <WifiSyncModal
+        visible={showSyncModal}
+        onClose={() => setShowSyncModal(false)}
+        flatId={flatId}
+        flatName={flatName}
+      />
     </View>
   );
 }
@@ -336,6 +376,16 @@ function makeStyles(c: Palette) {
     },
     featureDesc: {
       fontSize: 12,
+    },
+    syncBadge: {
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderRadius: 6,
+    },
+    syncBadgeText: {
+      color: "#fff",
+      fontSize: 10,
+      fontWeight: "800",
     },
 
     aboutCard: {

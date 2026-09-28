@@ -2,8 +2,7 @@ import type { Expense } from "../types";
 
 export type AuthStackParamList = {
   Onboarding: undefined;
-  Login: undefined;
-  Register: undefined;
+  CreateProfile: undefined;
 };
 
 export type AppStackParamList = {

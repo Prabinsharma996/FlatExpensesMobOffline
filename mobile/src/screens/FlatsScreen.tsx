@@ -1,5 +1,15 @@
 import React, { useCallback, useMemo, useState } from "react";
-import { ActivityIndicator, FlatList, Text, TouchableOpacity, StyleSheet, RefreshControl, ScrollView, Alert, View } from "react-native";
+import {
+  ActivityIndicator,
+  FlatList,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  RefreshControl,
+  ScrollView,
+  Alert,
+  View,
+} from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -14,6 +24,7 @@ import Screen from "../components/Screen";
 import GlassCard from "../components/GlassCard";
 import GlassButton from "../components/GlassButton";
 import FlatOnboardingForm from "../components/FlatOnboardingForm";
+import WifiSyncModal from "../offline/WifiSyncModal";
 
 type Props = NativeStackScreenProps<AppStackParamList, "Flats">;
 
@@ -25,7 +36,7 @@ const GROUP_ICON: Record<GroupType, keyof typeof Feather.glyphMap> = {
 };
 
 export default function FlatsScreen({ navigation }: Props) {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [flats, setFlats] = useState<Flat[]>([]);
@@ -33,6 +44,7 @@ export default function FlatsScreen({ navigation }: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [creating, setCreating] = useState(false);
   const [joining, setJoining] = useState(false);
+  const [showSyncModal, setShowSyncModal] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -103,13 +115,29 @@ export default function FlatsScreen({ navigation }: Props) {
     return (
       <Screen edges={["top", "bottom"]}>
         <ScrollView contentContainerStyle={styles.onboardingContent}>
-          <View style={styles.topRow}>{profileButton}</View>
+          <View style={styles.topRow}>
+            <TouchableOpacity
+              onPress={() => setShowSyncModal(true)}
+              style={[styles.syncHeaderBtn, { backgroundColor: colors.accentSoft }]}
+              activeOpacity={0.7}
+            >
+              <Feather name="wifi" size={14} color={colors.accent} />
+              <Text style={[styles.syncHeaderBtnText, { color: colors.accent }]}>Wi-Fi Sync</Text>
+            </TouchableOpacity>
+            {profileButton}
+          </View>
           <Text style={styles.welcomeTitle}>Welcome to{"\n"}FlatSplit</Text>
           <Text style={styles.welcomeSubtitle}>
-            Create a new flat or join your flatmates using their invite code.
+            100% Offline with Local Wi-Fi Sync. Create a flat or sync with your flatmates.
           </Text>
           <FlatOnboardingForm creating={creating} joining={joining} onCreate={handleCreate} onJoin={handleJoin} />
         </ScrollView>
+
+        <WifiSyncModal
+          visible={showSyncModal}
+          onClose={() => setShowSyncModal(false)}
+          onSyncComplete={load}
+        />
       </Screen>
     );
   }
@@ -119,11 +147,20 @@ export default function FlatsScreen({ navigation }: Props) {
       <View style={styles.header}>
         <View>
           <Text style={styles.greeting}>Hi, {user?.name ?? "there"} 👋</Text>
-          <Text style={styles.subGreeting}>Your flats</Text>
+          <Text style={styles.subGreeting}>Your flats (Offline & Local Wi-Fi Sync)</Text>
         </View>
-        {profileButton}
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+          <TouchableOpacity
+            onPress={() => setShowSyncModal(true)}
+            style={[styles.syncHeaderBtn, { backgroundColor: colors.accentSoft }]}
+            activeOpacity={0.7}
+          >
+            <Feather name="wifi" size={14} color={colors.accent} />
+            <Text style={[styles.syncHeaderBtnText, { color: colors.accent }]}>Wi-Fi Sync</Text>
+          </TouchableOpacity>
+          {profileButton}
+        </View>
       </View>
-
 
       <View style={styles.actionsRow}>
         <GlassButton label="Create Flat" icon="＋" onPress={() => navigation.navigate("CreateFlat")} style={styles.actionButton} />
@@ -163,15 +200,33 @@ export default function FlatsScreen({ navigation }: Props) {
           </TouchableOpacity>
         )}
       />
+
+      <WifiSyncModal
+        visible={showSyncModal}
+        onClose={() => setShowSyncModal(false)}
+        onSyncComplete={load}
+      />
     </Screen>
   );
 }
 
 function makeStyles(c: Palette) {
   return StyleSheet.create({
-    topRow: { alignItems: "flex-end", marginBottom: 8 },
+    topRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
     signOut: { flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 4 },
     signOutText: { color: c.textSecondary, fontWeight: "700", fontSize: 13 },
+    syncHeaderBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 12,
+    },
+    syncHeaderBtnText: {
+      fontSize: 12,
+      fontWeight: "800",
+    },
 
     onboardingContent: { padding: 20, paddingBottom: 40 },
     welcomeTitle: { fontSize: 30, fontWeight: "800", color: c.textPrimary, textAlign: "center", marginTop: 8, lineHeight: 36 },
@@ -185,7 +240,7 @@ function makeStyles(c: Palette) {
       paddingHorizontal: 10,
     },
 
-    header: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", paddingHorizontal: 20, paddingTop: 8 },
+    header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingTop: 8 },
     greeting: { fontSize: 24, fontWeight: "800", color: c.textPrimary },
     subGreeting: { fontSize: 13, color: c.textSecondary, marginTop: 2 },
 

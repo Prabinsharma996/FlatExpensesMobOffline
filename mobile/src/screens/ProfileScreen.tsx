@@ -9,6 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   TouchableOpacity,
+  TextInput,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -29,6 +30,12 @@ import SegmentedControl from "../components/SegmentedControl";
 
 type Props = NativeStackScreenProps<AppStackParamList, "Profile">;
 
+const AVATAR_LIST = [
+  "🦁", "🦊", "🐯", "🐼", "🐨", "🦄",
+  "🦅", "🚀", "⚡", "👑", "💎", "🎯",
+  "🎨", "🎧", "🍕", "🥑", "🌟", "☕",
+];
+
 const GROUP_ICON: Record<GroupType, keyof typeof Feather.glyphMap> = {
   FLAT: "home",
   TRIP: "compass",
@@ -44,7 +51,7 @@ const GROUP_TYPES: { value: GroupType; label: string }[] = [
 ];
 
 export default function ProfileScreen({ navigation }: Props) {
-  const { user, logout } = useAuth();
+  const { user, updateProfile, profiles, switchProfile, logout } = useAuth();
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
@@ -57,6 +64,11 @@ export default function ProfileScreen({ navigation }: Props) {
   const [flatName, setFlatName] = useState("");
   const [groupType, setGroupType] = useState<GroupType>("FLAT");
   const [creating, setCreating] = useState(false);
+
+  // Edit profile state
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editName, setEditName] = useState(user?.name || "");
+  const [isChoosingAvatar, setIsChoosingAvatar] = useState(false);
 
   // Handle creating a flat
   async function handleCreateFlat() {
@@ -72,8 +84,6 @@ export default function ProfileScreen({ navigation }: Props) {
       Alert.alert("Success", `Flat "${data.name}" created!\nShare invite code "${data.inviteCode}" with your roommates.`);
       setFlatName("");
       setGroupType("FLAT");
-      
-      // Navigate to the newly created flat detail screen
       navigation.navigate("FlatDetail", { flatId: data.id, flatName: data.name });
     } catch (err) {
       Alert.alert("Couldn't create flat", apiErrorMessage(err));
@@ -114,8 +124,6 @@ export default function ProfileScreen({ navigation }: Props) {
       const { data } = await FlatApi.join(trimmedCode);
       Alert.alert("Success", `You have successfully joined "${data.name}"!`);
       setInviteCode("");
-      
-      // Navigate to the newly joined flat detail screen
       navigation.navigate("FlatDetail", { flatId: data.flatId, flatName: data.name });
     } catch (err) {
       Alert.alert("Couldn't join flat", apiErrorMessage(err));
@@ -124,7 +132,19 @@ export default function ProfileScreen({ navigation }: Props) {
     }
   }
 
-  const userInitial = user?.name ? user.name.charAt(0).toUpperCase() : "?";
+  async function handleSaveName() {
+    if (!editName.trim()) {
+      Alert.alert("Name Required", "Name cannot be blank.");
+      return;
+    }
+    await updateProfile(editName.trim(), user?.avatar);
+    setIsEditingName(false);
+  }
+
+  async function handleSelectAvatar(avatar: string) {
+    await updateProfile(user?.name || "User", avatar);
+    setIsChoosingAvatar(false);
+  }
 
   return (
     <Screen edges={["bottom"]}>
@@ -135,13 +155,119 @@ export default function ProfileScreen({ navigation }: Props) {
       >
         <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
           {/* User Profile Header */}
-          <View style={styles.profileHeader}>
-            <View style={styles.avatarContainer}>
-              <Text style={styles.avatarText}>{userInitial}</Text>
-            </View>
-            <Text style={styles.userName}>{user?.name ?? "User"}</Text>
-            <Text style={styles.userEmail}>{user?.email ?? "No Email"}</Text>
-          </View>
+          <GlassCard style={styles.profileCard}>
+            <TouchableOpacity
+              style={[styles.avatarContainer, { backgroundColor: colors.accentSoft, borderColor: colors.accent }]}
+              onPress={() => setIsChoosingAvatar(!isChoosingAvatar)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.avatarEmoji}>{user?.avatar || "🦁"}</Text>
+              <View style={[styles.avatarEditBadge, { backgroundColor: colors.accent }]}>
+                <Feather name="edit-2" size={10} color={colors.onAccent} />
+              </View>
+            </TouchableOpacity>
+
+            {isEditingName ? (
+              <View style={styles.nameEditRow}>
+                <TextInput
+                  style={[
+                    styles.nameInput,
+                    { color: colors.textPrimary, backgroundColor: colors.input, borderColor: colors.inputBorder },
+                  ]}
+                  value={editName}
+                  onChangeText={setEditName}
+                  autoFocus
+                />
+                <TouchableOpacity
+                  style={[styles.saveNameBtn, { backgroundColor: colors.accent }]}
+                  onPress={handleSaveName}
+                  activeOpacity={0.8}
+                >
+                  <Feather name="check" size={16} color={colors.onAccent} />
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={styles.nameRow}
+                onPress={() => {
+                  setEditName(user?.name || "");
+                  setIsEditingName(true);
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.userName, { color: colors.textPrimary }]}>{user?.name ?? "User"}</Text>
+                <Feather name="edit-2" size={14} color={colors.textSecondary} />
+              </TouchableOpacity>
+            )}
+
+            <Text style={[styles.offlineTag, { color: colors.accent, backgroundColor: colors.accentSoft }]}>
+              Offline Profile
+            </Text>
+
+            {/* Avatar Picker Accordion */}
+            {isChoosingAvatar && (
+              <View style={styles.avatarGridWrap}>
+                <Text style={[styles.pickerTitle, { color: colors.textSecondary }]}>Pick your avatar:</Text>
+                <View style={styles.avatarGrid}>
+                  {AVATAR_LIST.map((emoji) => (
+                    <TouchableOpacity
+                      key={emoji}
+                      style={[
+                        styles.avatarItem,
+                        {
+                          backgroundColor: user?.avatar === emoji ? colors.accentSoft : colors.input,
+                          borderColor: user?.avatar === emoji ? colors.accent : colors.inputBorder,
+                          borderWidth: user?.avatar === emoji ? 2 : 1,
+                        },
+                      ]}
+                      onPress={() => handleSelectAvatar(emoji)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={{ fontSize: 22 }}>{emoji}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
+          </GlassCard>
+
+          {/* Switch Profile if multiple exist */}
+          {profiles.length > 1 && (
+            <GlassCard style={styles.switchCard}>
+              <Text style={styles.sectionTitle}>Switch Profile</Text>
+              <Text style={styles.sectionDescription}>Switch between users on this device:</Text>
+              <View style={styles.profilesList}>
+                {profiles.map((p) => {
+                  const isActive = p.id === user?.id;
+                  return (
+                    <TouchableOpacity
+                      key={p.id}
+                      style={[
+                        styles.profilePill,
+                        {
+                          backgroundColor: isActive ? colors.accentSoft : colors.input,
+                          borderColor: isActive ? colors.accent : colors.inputBorder,
+                        },
+                      ]}
+                      onPress={() => switchProfile(p.id)}
+                      activeOpacity={0.75}
+                    >
+                      <Text style={{ fontSize: 18 }}>{p.avatar || "👤"}</Text>
+                      <Text
+                        style={[
+                          styles.profilePillName,
+                          { color: isActive ? colors.accent : colors.textPrimary, fontWeight: isActive ? "800" : "600" },
+                        ]}
+                      >
+                        {p.name} {isActive ? "(Current)" : ""}
+                      </Text>
+                      {isActive && <Feather name="check" size={16} color={colors.accent} />}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </GlassCard>
+          )}
 
           {/* Create or Join Flat Card */}
           <GlassCard style={styles.card}>
@@ -258,11 +384,11 @@ export default function ProfileScreen({ navigation }: Props) {
             )}
           </View>
 
-          {/* Sign Out Action */}
+          {/* Switch/New Profile Button */}
           <GlassButton
-            label="Sign Out"
+            label="Create New Profile on this Device"
             onPress={logout}
-            variant="danger"
+            variant="glass"
             style={styles.signOutButton}
           />
         </ScrollView>
@@ -277,35 +403,114 @@ function makeStyles(c: Palette) {
       padding: 20,
       paddingBottom: 40,
     },
-    profileHeader: {
+    profileCard: {
       alignItems: "center",
-      marginVertical: 20,
+      padding: 20,
+      marginBottom: 20,
     },
     avatarContainer: {
-      width: 72,
-      height: 72,
-      borderRadius: 36,
-      backgroundColor: c.accentSoft,
+      width: 76,
+      height: 76,
+      borderRadius: 38,
       alignItems: "center",
       justifyContent: "center",
-      marginBottom: 12,
+      marginBottom: 10,
       borderWidth: 2,
-      borderColor: c.accent,
+      position: "relative",
     },
-    avatarText: {
-      fontSize: 28,
-      fontWeight: "800",
-      color: c.accent,
+    avatarEmoji: {
+      fontSize: 38,
+    },
+    avatarEditBadge: {
+      position: "absolute",
+      right: 0,
+      bottom: 0,
+      width: 22,
+      height: 22,
+      borderRadius: 11,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    nameRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      paddingVertical: 4,
     },
     userName: {
-      fontSize: 22,
+      fontSize: 20,
       fontWeight: "800",
-      color: c.textPrimary,
     },
-    userEmail: {
-      fontSize: 14,
-      color: c.textSecondary,
+    offlineTag: {
+      fontSize: 11,
+      fontWeight: "800",
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: 8,
       marginTop: 4,
+    },
+    nameEditRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      marginTop: 4,
+    },
+    nameInput: {
+      borderWidth: 1,
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      fontSize: 16,
+      fontWeight: "700",
+      minWidth: 160,
+      textAlign: "center",
+    },
+    saveNameBtn: {
+      padding: 8,
+      borderRadius: 10,
+    },
+    avatarGridWrap: {
+      marginTop: 16,
+      width: "100%",
+    },
+    pickerTitle: {
+      fontSize: 11,
+      fontWeight: "700",
+      marginBottom: 8,
+    },
+    avatarGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+      justifyContent: "center",
+    },
+    avatarItem: {
+      width: 42,
+      height: 42,
+      borderRadius: 12,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    switchCard: {
+      marginBottom: 20,
+      padding: 16,
+    },
+    profilesList: {
+      gap: 8,
+      marginTop: 8,
+    },
+    profilePill: {
+      flexDirection: "row",
+      alignItems: "center",
+      padding: 10,
+      paddingHorizontal: 14,
+      borderRadius: 12,
+      borderWidth: 1,
+      gap: 10,
+    },
+    profilePillName: {
+      flex: 1,
+      fontSize: 14,
     },
     card: {
       marginBottom: 24,

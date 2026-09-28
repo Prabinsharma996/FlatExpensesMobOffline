@@ -1,73 +1,48 @@
+# FlatSplit (Offline-First & Local Wi-Fi P2P Sync)
 
-# FlatSplit
+A fast, private, offline-first shared flat-expense tracker & chore manager. **No external database or cloud backend required.** All data is stored locally on each roommate's phone and synchronizes peer-to-peer over the local Wi-Fi network (or hotspot) when connected.
 
-Shared flat-expense tracker: create a flat, invite roommates, open a "book" (an
-expense period), log expenses with category/remarks/split, watch live balances,
-then close the book to get the minimum set of payments needed to settle up
-(e.g. "A pays C ₹250" instead of everyone paying everyone).
+## Key Features
 
-## Structure
+- 📱 **100% Offline-First**: Works anywhere without internet or backend servers. All data (flats, books, expenses, balances, chores, tasks, shopping lists, house polls, budgets) persists directly on the device.
+- 📶 **Wi-Fi Peer-to-Peer Sync**: When roommates connect to the same Wi-Fi (or mobile hotspot), devices can discover each other on the local network subnet and synchronize all changes in real time.
+- ⚡ **Instant Sync Codes & QR Sharing**: 1-tap copy/paste sync payload or share backup files via WhatsApp, AirDrop, Telegram, or Nearby Share.
+- 🧮 **Exact Math & Debt Simplification**: Built-in greedy min-cash-flow algorithm reduces debts to the absolute minimum transactions (e.g. "A pays C ₹250" instead of everyone paying everyone). Supports Equal, Exact Amount, and Percentage-based splits with paise/cents precision.
+- 🧹 **Chores & Fair Duty Roster**: Auto-rotating chore schedule, fair task assignment based on past workloads, and wheel-of-fate task randomizer.
+- 🛒 **Shared Shopping List & Polls**: Collective grocery checklist and house voting.
 
-- `backend/` — Node.js + Express + MySQL (via Prisma) REST API
-- `mobile/` — React Native (Expo) app
+---
 
-## Backend setup
+## Getting Started
 
-1. Install MySQL locally (or use a hosted instance) and create a database:
-   ```sql
-   CREATE DATABASE flatsplit;
+### Prerequisites
+
+- Node.js (v18+)
+- Expo CLI (`npm install -g expo-cli` or `npx expo`)
+
+### Running the Mobile App
+
+1. Navigate to the `mobile` folder:
+   ```bash
+   cd mobile
    ```
-2. `cd backend`
-3. Copy `.env.example` to `.env` and fill in `DATABASE_URL` (with your MySQL
-   user/password) and a random `JWT_SECRET`.
-4. Install deps and run the migration:
-   ```
+2. Install dependencies:
+   ```bash
    npm install
-   npx prisma migrate dev --name init
    ```
-5. Start the API:
-   ```
-   npm run dev
-   ```
-   It listens on `http://localhost:4000` (health check: `GET /health`).
-
-## Mobile setup
-
-1. `cd mobile`
-2. In `src/api/client.ts`, set `API_BASE_URL` to your machine's LAN IP (e.g.
-   `http://192.168.1.20:4000`) — `localhost` won't resolve from a phone or
-   emulator. Find your IP with `ipconfig` (Windows).
-3. Install deps (already done if you just cloned this) and start Expo:
-   ```
-   npm install
+3. Start the Expo development server:
+   ```bash
    npm start
    ```
-4. Scan the QR code with **Expo Go** (iOS/Android) to run it on your phone, or
-   press `a` / `i` for an emulator.
+4. Scan the QR code using the **Expo Go** app on your Android/iOS phone or press `a` for Android Emulator / `w` for Web.
 
-## Core flow
+---
 
-1. Register / log in.
-2. Create a flat (or join one with an invite code) — creator becomes admin.
-3. Inside a flat, create a **book** (e.g. "July Groceries").
-4. Add expenses to the book: amount, category, remarks, who paid, and how it's
-   split (equally or custom amounts) among selected members.
-5. View live running balances any time the book is open.
-6. Close the book to lock it and generate the final settlement — the minimum
-   number of "X pays Y" transactions. Either party can mark a transaction as
-   paid once settled in real life.
-7. Multiple books can be open in a flat at once; closed books stay in the
-   flat's history.
+## How Local Wi-Fi Sync Works
 
-## What's implemented vs. suggested next
-
-Implemented: multi-flat support, invite-code joining, admin role (remove
-members), multiple concurrent books, equal/exact-amount splitting, live
-balances, debt-simplification on close, settlement pay-tracking, session
-persistence (`/auth/me`).
-
-Reasonable next additions (not built yet, kept out to avoid over-building
-before you've used the MVP): percentage-based splits (backend already
-supports it, just needs a UI), receipt photo attachments, push notifications
-(new expense / payment reminders — FCM), recurring expenses (e.g. monthly
-rent), CSV/PDF export of a closed book, offline queueing for spotty wifi.
+1. **Local Storage**: Each device writes to its own persistent local database.
+2. **Wi-Fi Subnet Discovery**: Open **Wi-Fi Sync** on your phone (from the Flats screen or Flat Features tab) to scan the local Wi-Fi subnet for roommates.
+3. **Direct Peer Sync**:
+   - Tap **"Auto-Find Roommates on Wi-Fi"** or enter your roommate's local Wi-Fi IP.
+   - Or tap **"Copy Instant Sync Code"** / **"Share Backup File"** to send the flat data directly over messaging apps without any server.
+4. **Smart Conflict Resolution**: Updates are merged using Last-Write-Wins timestamps and set-union merging so no expense or task is lost.

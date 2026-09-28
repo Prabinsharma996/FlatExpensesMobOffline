@@ -1,7 +1,8 @@
-import { api } from "./client";
 import {
   Book,
+  BookBudgetData,
   BookDetail,
+  CategoryBudget,
   Chore,
   ChoreFrequency,
   Expense,
@@ -22,32 +23,90 @@ import {
   User,
 } from "../types";
 
+export type { CategoryBudget, BookBudgetData };
+import { offlineDb } from "../offline/OfflineDatabase";
+
+// Helper to wrap local offline database calls in an Axios-like response format { data }
+function toResponse<T>(data: T): Promise<{ data: T }> {
+  return Promise.resolve({ data });
+}
+
 export const AuthApi = {
-  register: (name: string, email: string, password: string) =>
-    api.post<{ token: string; user: User }>("/auth/register", { name, email, password }),
-  login: (email: string, password: string) =>
-    api.post<{ token: string; user: User }>("/auth/login", { email, password }),
-  me: () => api.get<{ user: User }>("/auth/me"),
+  register: async (name: string, email: string, _password?: string) => {
+    const user = await offlineDb.createOrLoginUser(name, email);
+    return toResponse<{ token: string; user: User }>({ token: "offline_token", user });
+  },
+  login: async (email: string, _password?: string) => {
+    const user = await offlineDb.createOrLoginUser(email.split("@")[0] || "User", email);
+    return toResponse<{ token: string; user: User }>({ token: "offline_token", user });
+  },
+  me: async () => {
+    const user = await offlineDb.getCurrentUser();
+    if (!user) throw new Error("No active profile");
+    return toResponse<{ user: User }>({ user });
+  },
 };
 
 export const FlatApi = {
-  list: () => api.get<Flat[]>("/flats"),
-  create: (name: string, groupType: GroupType = "FLAT") => api.post<Flat>("/flats", { name, groupType }),
-  join: (inviteCode: string) => api.post<{ flatId: number; name: string }>("/flats/join", { inviteCode }),
-  detail: (flatId: number) => api.get<Flat>(`/flats/${flatId}`),
-  report: (flatId: number) => api.get<FlatReport>(`/flats/${flatId}/report`),
-  expenses: (flatId: number) => api.get<Expense[]>(`/flats/${flatId}/expenses`),
-  balances: (flatId: number) => api.get<FlatBalances>(`/flats/${flatId}/balances`),
-  addGuest: (flatId: number, name: string) => api.post<FlatMember>(`/flats/${flatId}/guests`, { name }),
-  removeMember: (flatId: number, userId: number) => api.delete(`/flats/${flatId}/members/${userId}`),
+  list: async () => {
+    const flats = await offlineDb.listFlats();
+    return toResponse<Flat[]>(flats);
+  },
+  create: async (name: string, groupType: GroupType = "FLAT") => {
+    const flat = await offlineDb.createFlat(name, groupType);
+    return toResponse<Flat>(flat);
+  },
+  join: async (inviteCode: string) => {
+    const result = await offlineDb.joinFlat(inviteCode);
+    return toResponse<{ flatId: number; name: string }>(result);
+  },
+  detail: async (flatId: number) => {
+    const flat = await offlineDb.getFlat(flatId);
+    return toResponse<Flat>(flat);
+  },
+  report: async (flatId: number) => {
+    const report = await offlineDb.getFlatReport(flatId);
+    return toResponse<FlatReport>(report);
+  },
+  expenses: async (flatId: number) => {
+    const expenses = await offlineDb.listFlatExpenses(flatId);
+    return toResponse<Expense[]>(expenses);
+  },
+  balances: async (flatId: number) => {
+    const balances = await offlineDb.getFlatBalances(flatId);
+    return toResponse<FlatBalances>(balances);
+  },
+  addGuest: async (flatId: number, name: string) => {
+    const member = await offlineDb.addGuest(flatId, name);
+    return toResponse<FlatMember>(member);
+  },
+  removeMember: async (flatId: number, userId: number) => {
+    await offlineDb.removeMember(flatId, userId);
+    return toResponse<void>(undefined);
+  },
 };
 
 export const BookApi = {
-  list: (flatId: number) => api.get<Book[]>(`/flats/${flatId}/books`),
-  create: (flatId: number, name: string) => api.post<Book>(`/flats/${flatId}/books`, { name }),
-  detail: (bookId: number) => api.get<BookDetail>(`/books/${bookId}`),
-  close: (bookId: number) => api.post(`/books/${bookId}/close`),
-  markSettlementPaid: (settlementId: number) => api.patch(`/settlements/${settlementId}/pay`),
+  list: async (flatId: number) => {
+    const books = await offlineDb.listBooks(flatId);
+    return toResponse<Book[]>(books);
+  },
+  create: async (flatId: number, name: string) => {
+    const book = await offlineDb.createBook(flatId, name);
+    return toResponse<Book>(book);
+  },
+  detail: async (bookId: number) => {
+    const detail = await offlineDb.getBookDetail(bookId);
+    return toResponse<BookDetail>(detail);
+  },
+  close: async (bookId: number) => {
+    const result = await offlineDb.closeBook(bookId);
+    return toResponse(result);
+  },
+  markSettlementPaid: async (settlementId: number) => {
+    const settlement = await offlineDb.markSettlementPaid(settlementId);
+    return toResponse(settlement);
+  },
 };
 
 export type CreateExpensePayload = {
@@ -60,20 +119,41 @@ export type CreateExpensePayload = {
 };
 
 export const ExpenseApi = {
-  list: (bookId: number) => api.get<Expense[]>(`/books/${bookId}/expenses`),
-  create: (bookId: number, payload: CreateExpensePayload) =>
-    api.post<Expense>(`/books/${bookId}/expenses`, payload),
-  update: (expenseId: number, payload: CreateExpensePayload) =>
-    api.put<Expense>(`/expenses/${expenseId}`, payload),
-  remove: (expenseId: number) => api.delete(`/expenses/${expenseId}`),
+  list: async (bookId: number) => {
+    const expenses = await offlineDb.listExpenses(bookId);
+    return toResponse<Expense[]>(expenses);
+  },
+  create: async (bookId: number, payload: CreateExpensePayload) => {
+    const expense = await offlineDb.createExpense(bookId, payload);
+    return toResponse<Expense>(expense);
+  },
+  update: async (expenseId: number, payload: CreateExpensePayload) => {
+    const expense = await offlineDb.updateExpense(expenseId, payload);
+    return toResponse<Expense>(expense);
+  },
+  remove: async (expenseId: number) => {
+    await offlineDb.removeExpense(expenseId);
+    return toResponse<void>(undefined);
+  },
 };
 
 export const PollApi = {
-  list: (flatId: number) => api.get<Poll[]>(`/flats/${flatId}/polls`),
-  create: (flatId: number, question: string, options: string[]) =>
-    api.post<Poll>(`/flats/${flatId}/polls`, { question, options }),
-  vote: (pollId: number, optionId: number) => api.post<Poll>(`/polls/${pollId}/vote`, { optionId }),
-  close: (pollId: number) => api.post<Poll>(`/polls/${pollId}/close`),
+  list: async (flatId: number) => {
+    const polls = await offlineDb.listPolls(flatId);
+    return toResponse<Poll[]>(polls);
+  },
+  create: async (flatId: number, question: string, options: string[]) => {
+    const poll = await offlineDb.createPoll(flatId, question, options);
+    return toResponse<Poll>(poll);
+  },
+  vote: async (pollId: number, optionId: number) => {
+    const poll = await offlineDb.votePoll(pollId, optionId);
+    return toResponse<Poll>(poll);
+  },
+  close: async (pollId: number) => {
+    const poll = await offlineDb.closePoll(pollId);
+    return toResponse<Poll>(poll);
+  },
 };
 
 export type CreateChorePayload = {
@@ -84,12 +164,26 @@ export type CreateChorePayload = {
 };
 
 export const ChoreApi = {
-  list: (flatId: number) => api.get<Chore[]>(`/flats/${flatId}/chores`),
-  create: (flatId: number, payload: CreateChorePayload) =>
-    api.post<Chore>(`/flats/${flatId}/chores`, payload),
-  toggle: (choreId: number) => api.patch<Chore>(`/chores/${choreId}/toggle`),
-  rotate: (choreId: number) => api.post<Chore>(`/chores/${choreId}/rotate`),
-  remove: (choreId: number) => api.delete(`/chores/${choreId}`),
+  list: async (flatId: number) => {
+    const chores = await offlineDb.listChores(flatId);
+    return toResponse<Chore[]>(chores);
+  },
+  create: async (flatId: number, payload: CreateChorePayload) => {
+    const chore = await offlineDb.createChore(flatId, payload);
+    return toResponse<Chore>(chore);
+  },
+  toggle: async (choreId: number) => {
+    const chore = await offlineDb.toggleChore(choreId);
+    return toResponse<Chore>(chore);
+  },
+  rotate: async (choreId: number) => {
+    const chore = await offlineDb.rotateChore(choreId);
+    return toResponse<Chore>(chore);
+  },
+  remove: async (choreId: number) => {
+    await offlineDb.removeChore(choreId);
+    return toResponse<void>(undefined);
+  },
 };
 
 export type CreateTaskPayload = {
@@ -107,44 +201,70 @@ export type CreateTaskPayload = {
 };
 
 export const TaskApi = {
-  list: (flatId: number) => api.get<Task[]>(`/flats/${flatId}/tasks`),
-  create: (flatId: number, payload: CreateTaskPayload) => api.post<Task>(`/flats/${flatId}/tasks`, payload),
-  complete: (taskId: number) => api.patch<Task>(`/tasks/${taskId}/complete`),
-  swap: (taskId: number, targetId: number, reason?: string) => api.post(`/tasks/${taskId}/swap`, { targetId, reason }),
-  respondSwap: (swapId: number, action: "ACCEPT" | "REJECT") => api.post(`/task-swaps/${swapId}/respond`, { action }),
-  skip: (taskId: number, reason?: string, reassign?: boolean) => api.post(`/tasks/${taskId}/skip`, { reason, reassign }),
-  workload: (flatId: number) => api.get<TaskWorkload>(`/flats/${flatId}/workload`),
-  getPreferences: (flatId: number) => api.get<TaskPreference>(`/flats/${flatId}/task-preferences`),
-  updatePreferences: (flatId: number, pref: Partial<TaskPreference>) => api.put<TaskPreference>(`/flats/${flatId}/task-preferences`, pref),
-};
-
-export type CategoryBudget = {
-  id: number;
-  category: string;
-  amountLimit: number;
-  spent: number;
-  percentUsed: number;
-  status: "OK" | "WARNING" | "OVER";
-};
-
-export type BookBudgetData = {
-  bookId: number;
-  totalLimit: number;
-  totalSpent: number;
-  totalPercentUsed: number;
-  alerts: string[];
-  categories: CategoryBudget[];
+  list: async (flatId: number) => {
+    const tasks = await offlineDb.listTasks(flatId);
+    return toResponse<Task[]>(tasks);
+  },
+  create: async (flatId: number, payload: CreateTaskPayload) => {
+    const task = await offlineDb.createTask(flatId, payload);
+    return toResponse<Task>(task);
+  },
+  complete: async (taskId: number) => {
+    const task = await offlineDb.completeTask(taskId);
+    return toResponse<Task>(task);
+  },
+  swap: async (taskId: number, targetId: number, reason?: string) => {
+    const swap = await offlineDb.swapTask(taskId, targetId, reason);
+    return toResponse(swap);
+  },
+  respondSwap: async (swapId: number, action: "ACCEPT" | "REJECT") => {
+    await offlineDb.respondSwap(swapId, action);
+    return toResponse({ message: `Swap request ${action.toLowerCase()}ed` });
+  },
+  skip: async (taskId: number, reason?: string, reassign?: boolean) => {
+    const task = await offlineDb.skipTask(taskId, reason, reassign);
+    return toResponse<Task>(task);
+  },
+  workload: async (flatId: number) => {
+    const workload = await offlineDb.getTaskWorkload(flatId);
+    return toResponse<TaskWorkload>(workload);
+  },
+  getPreferences: async (flatId: number) => {
+    const pref = await offlineDb.getTaskPreferences(flatId);
+    return toResponse<TaskPreference>(pref);
+  },
+  updatePreferences: async (flatId: number, pref: Partial<TaskPreference>) => {
+    const updated = await offlineDb.updateTaskPreferences(flatId, pref);
+    return toResponse<TaskPreference>(updated);
+  },
 };
 
 export const BudgetApi = {
-  get: (bookId: number) => api.get<BookBudgetData>(`/books/${bookId}/budget`),
-  update: (bookId: number, budgets: { category: string; amountLimit: number }[]) =>
-    api.post<{ message: string }>(`/books/${bookId}/budget`, { budgets }),
+  get: async (bookId: number) => {
+    const budget = await offlineDb.getBudgets(bookId);
+    return toResponse<BookBudgetData>(budget);
+  },
+  update: async (bookId: number, budgets: { category: string; amountLimit: number }[]) => {
+    const result = await offlineDb.updateBudgets(bookId, budgets);
+    return toResponse<{ message: string }>(result);
+  },
 };
 
 export const ShoppingApi = {
-  list: (flatId: number) => api.get<ShoppingItem[]>(`/flats/${flatId}/shopping`),
-  add: (flatId: number, title: string, quantity?: string) => api.post<ShoppingItem>(`/flats/${flatId}/shopping`, { title, quantity }),
-  toggle: (itemId: number) => api.patch<ShoppingItem>(`/shopping/${itemId}/toggle`),
-  remove: (itemId: number) => api.delete(`/shopping/${itemId}`),
+  list: async (flatId: number) => {
+    const items = await offlineDb.listShopping(flatId);
+    return toResponse<ShoppingItem[]>(items);
+  },
+  add: async (flatId: number, title: string, quantity?: string) => {
+    const item = await offlineDb.addShoppingItem(flatId, title, quantity);
+    return toResponse<ShoppingItem>(item);
+  },
+  toggle: async (itemId: number) => {
+    const item = await offlineDb.toggleShoppingItem(itemId);
+    return toResponse<ShoppingItem>(item);
+  },
+  remove: async (itemId: number) => {
+    await offlineDb.removeShoppingItem(itemId);
+    return toResponse<void>(undefined);
+  },
 };

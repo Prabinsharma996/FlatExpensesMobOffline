@@ -10,8 +10,7 @@ import type { AuthStackParamList, AppStackParamList } from "./types";
 import Screen from "../components/Screen";
 
 import OnboardingScreen from "../screens/OnboardingScreen";
-import LoginScreen from "../screens/LoginScreen";
-import RegisterScreen from "../screens/RegisterScreen";
+import CreateProfileScreen from "../screens/CreateProfileScreen";
 import FlatsScreen from "../screens/FlatsScreen";
 import CreateFlatScreen from "../screens/CreateFlatScreen";
 import FlatDetailScreen from "../screens/FlatDetailScreen";
@@ -20,18 +19,17 @@ import BookDetailScreen from "../screens/BookDetailScreen";
 import AddExpenseScreen from "../screens/AddExpenseScreen";
 import ProfileScreen from "../screens/ProfileScreen";
 
-
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
 const AppStack = createNativeStackNavigator<AppStackParamList>();
 
 function AuthNavigator() {
-  const [initialRoute, setInitialRoute] = useState<"Onboarding" | "Login" | null>(null);
+  const [initialRoute, setInitialRoute] = useState<"Onboarding" | "CreateProfile" | null>(null);
 
   useEffect(() => {
     (async () => {
       try {
         const seen = await AsyncStorage.getItem("@onboarding_seen");
-        setInitialRoute(seen === "true" ? "Login" : "Onboarding");
+        setInitialRoute(seen === "true" ? "CreateProfile" : "Onboarding");
       } catch {
         setInitialRoute("Onboarding");
       }
@@ -43,8 +41,7 @@ function AuthNavigator() {
   return (
     <AuthStack.Navigator initialRouteName={initialRoute} screenOptions={{ headerShown: false }}>
       <AuthStack.Screen name="Onboarding" component={OnboardingScreen} />
-      <AuthStack.Screen name="Login" component={LoginScreen} />
-      <AuthStack.Screen name="Register" component={RegisterScreen} />
+      <AuthStack.Screen name="CreateProfile" component={CreateProfileScreen} />
     </AuthStack.Navigator>
   );
 }
@@ -76,7 +73,6 @@ function AppNavigator() {
       <AppStack.Screen name="BookDetail" component={BookDetailScreen} options={{ title: "Book" }} />
       <AppStack.Screen name="AddExpense" component={AddExpenseScreen} options={{ title: "Add Expense" }} />
       <AppStack.Screen name="Profile" component={ProfileScreen} options={{ title: "Profile" }} />
-
     </AppStack.Navigator>
   );
 }

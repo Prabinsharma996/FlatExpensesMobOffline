@@ -10,10 +10,12 @@ node_modules/
 dist/
 build/
 
-# Expo
+# Expo & Binaries
 .expo/
 *.jks
 *.keystore
+*.apk
+*.aab
 
 # Prisma generated
 backend/src/generated/

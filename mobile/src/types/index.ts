@@ -1,7 +1,8 @@
 export type User = {
   id: number;
   name: string;
-  email: string;
+  avatar?: string;
+  email?: string;
   isGuest?: boolean;
 };
 
@@ -122,8 +123,8 @@ export type Chore = {
   isCompleted: boolean;
   dueDate: string | null;
   createdAt: string;
-  assignedUser?: { id: number; name: string; email: string } | null;
-  creator: { id: number; name: string; email: string };
+  assignedUser?: User | null;
+  creator: User;
 };
 
 export type TaskDifficulty = "EASY" | "MEDIUM" | "HARD";
@@ -197,3 +198,24 @@ export type ShoppingItem = {
   addedBy: { id: number; name: string };
   boughtBy?: { id: number; name: string } | null;
 };
+
+export type ExpenseBook = Book;
+
+export type CategoryBudget = {
+  id: number;
+  category: string;
+  amountLimit: number;
+  spent: number;
+  percentUsed: number;
+  status: "OK" | "WARNING" | "OVER";
+};
+
+export type BookBudgetData = {
+  bookId: number;
+  totalLimit: number;
+  totalSpent: number;
+  totalPercentUsed: number;
+  alerts: string[];
+  categories: CategoryBudget[];
+};
+

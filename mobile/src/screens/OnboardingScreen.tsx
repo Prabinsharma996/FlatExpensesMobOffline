@@ -61,13 +61,13 @@ export default function OnboardingScreen({ navigation }: Props) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const flatListRef = useRef<FlatList>(null);
 
-  async function completeOnboarding(target: "Register" | "Login") {
+  async function completeOnboarding() {
     try {
       await AsyncStorage.setItem("@onboarding_seen", "true");
     } catch (e) {
       console.warn("Couldn't save onboarding state", e);
     }
-    navigation.replace(target);
+    navigation.replace("CreateProfile");
   }
 
   function handleNext() {
@@ -76,7 +76,7 @@ export default function OnboardingScreen({ navigation }: Props) {
       flatListRef.current?.scrollToIndex({ index: nextIdx, animated: true });
       setCurrentIndex(nextIdx);
     } else {
-      completeOnboarding("Register");
+      completeOnboarding();
     }
   }
 
@@ -92,7 +92,7 @@ export default function OnboardingScreen({ navigation }: Props) {
         </View>
 
         <TouchableOpacity
-          onPress={() => completeOnboarding("Login")}
+          onPress={completeOnboarding}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           activeOpacity={0.7}
         >
@@ -155,22 +155,10 @@ export default function OnboardingScreen({ navigation }: Props) {
 
         {/* Primary Action Button */}
         <GlassButton
-          label={currentIndex === ONBOARDING_SLIDES.length - 1 ? "Get Started 🚀" : "Next →"}
+          label={currentIndex === ONBOARDING_SLIDES.length - 1 ? "Create Profile 🚀" : "Next →"}
           onPress={handleNext}
           style={styles.primaryBtn}
         />
-
-        {/* Login Option */}
-        <TouchableOpacity
-          onPress={() => completeOnboarding("Login")}
-          style={styles.loginOption}
-          activeOpacity={0.75}
-        >
-          <Text style={[styles.loginText, { color: colors.textSecondary }]}>
-            Already have an account?{" "}
-            <Text style={{ color: colors.accent, fontWeight: "700" }}>Log In</Text>
-          </Text>
-        </TouchableOpacity>
       </View>
     </Screen>
   );
