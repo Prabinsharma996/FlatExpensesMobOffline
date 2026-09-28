@@ -2,13 +2,14 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Image,
+  Dimensions,
   Modal,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
+  Vibration,
   View,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
@@ -18,7 +19,8 @@ import GlassButton from "../components/GlassButton";
 import GlassCard from "../components/GlassCard";
 import { wifiSyncService } from "./WifiSyncService";
 import * as Clipboard from "expo-clipboard";
-import QRCode from "qrcode";
+import QRCode from "react-native-qrcode-svg";
+import { CameraView, useCameraPermissions } from "expo-camera";
 
 type Props = {
   visible: boolean;
@@ -27,6 +29,8 @@ type Props = {
   flatName?: string;
   onSyncComplete?: () => void;
 };
+
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
 export default function WifiSyncModal({
   visible,
@@ -38,7 +42,7 @@ export default function WifiSyncModal({
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
-  const [activeTab, setActiveTab] = useState<"qr" | "wifi" | "import">("qr");
+  const [activeTab, setActiveTab] = useState<"show_qr" | "scan_qr" | "wifi" | "import">("show_qr");
   const [localIp, setLocalIp] = useState("");
   const [targetIp, setTargetIp] = useState("");
   const [isScanning, setIsScanning] = useState(false);
@@ -46,14 +50,19 @@ export default function WifiSyncModal({
   const [discoveredPeers, setDiscoveredPeers] = useState<string[]>([]);
   const [importText, setImportText] = useState("");
   const [syncStatus, setSyncStatus] = useState<string | null>(null);
-  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  const [qrPayload, setQrPayload] = useState<string | null>(null);
   const [clipboardPayload, setClipboardPayload] = useState<string | null>(null);
+  const [scanned, setScanned] = useState(false);
+
+  // Camera permissions
+  const [permission, requestPermission] = useCameraPermissions();
 
   useEffect(() => {
     if (visible) {
       const ip = wifiSyncService.getLocalIp();
       setLocalIp(ip);
       setSyncStatus(null);
+      setScanned(false);
       loadQrCode();
       checkClipboardForSyncData();
     }
@@ -62,29 +71,59 @@ export default function WifiSyncModal({
   async function loadQrCode() {
     try {
       const payload = await wifiSyncService.generateSyncPayload(flatId);
-      const url = await QRCode.toDataURL(payload, {
-        margin: 1,
-        scale: 6,
-        color: {
-          dark: "#000000",
-          light: "#FFFFFF",
-        },
-      });
-      setQrDataUrl(url);
+      setQrPayload(payload);
     } catch (err) {
-      console.error("Failed to generate QR code:", err);
+      console.error("Failed to generate QR payload:", err);
     }
   }
 
   async function checkClipboardForSyncData() {
     try {
       const text = await Clipboard.getStringAsync();
-      if (text && (text.includes("FLATSPLIT_SYNC_V1") || text.includes("FLATSPLIT_FULL_SYNC_V1"))) {
+      if (text && (text.includes("FLATSPLIT_SYNC_V1") || text.includes("FLATSPLIT_FULL_SYNC_V1") || text.includes('"flat"') || text.includes('"flats"'))) {
         setClipboardPayload(text);
       } else {
         setClipboardPayload(null);
       }
     } catch {}
+  }
+
+  async function handleBarcodeScanned({ data }: { data: string }) {
+    if (scanned || isSyncing) return;
+    setScanned(true);
+    Vibration.vibrate(100);
+
+    setIsSyncing(true);
+    try {
+      const result = await wifiSyncService.applySyncPayload(data);
+      if (result.success) {
+        Alert.alert("Sync Successful! 🎉", result.message, [
+          {
+            text: "Done",
+            onPress: () => {
+              onSyncComplete?.();
+              onClose();
+            },
+          },
+        ]);
+      } else {
+        Alert.alert("QR Code Detected", result.message, [
+          {
+            text: "Try Again",
+            onPress: () => setScanned(false),
+          },
+        ]);
+      }
+    } catch (err: any) {
+      Alert.alert("Scan Error", err.message || "Failed to process QR sync data.", [
+        {
+          text: "Try Again",
+          onPress: () => setScanned(false),
+        },
+      ]);
+    } finally {
+      setIsSyncing(false);
+    }
   }
 
   async function handleScanSubnet() {
@@ -207,9 +246,9 @@ export default function WifiSyncModal({
                 <Feather name="refresh-cw" size={20} color={colors.accent} />
               </View>
               <View>
-                <Text style={styles.title}>Easy Peer-to-Peer Sync</Text>
+                <Text style={styles.title}>Offline P2P Wi-Fi Sync</Text>
                 <Text style={styles.subtitle}>
-                  {flatName ? `Sync "${flatName}" across phones` : "100% Offline • No database needed"}
+                  {flatName ? `Sync "${flatName}" across phones` : "100% Offline • Instant Transfer"}
                 </Text>
               </View>
             </View>
@@ -241,13 +280,33 @@ export default function WifiSyncModal({
           {/* Navigation Tabs */}
           <View style={[styles.tabBar, { backgroundColor: colors.input }]}>
             <TouchableOpacity
-              style={[styles.tab, activeTab === "qr" && [styles.activeTab, { backgroundColor: colors.accent }]]}
-              onPress={() => setActiveTab("qr")}
+              style={[styles.tab, activeTab === "show_qr" && [styles.activeTab, { backgroundColor: colors.accent }]]}
+              onPress={() => {
+                setActiveTab("show_qr");
+                setScanned(false);
+              }}
               activeOpacity={0.8}
             >
-              <Feather name="maximize" size={14} color={activeTab === "qr" ? "#fff" : colors.textSecondary} />
-              <Text style={[styles.tabText, { color: activeTab === "qr" ? "#fff" : colors.textSecondary }]}>
-                Instant QR
+              <Feather name="grid" size={14} color={activeTab === "show_qr" ? "#fff" : colors.textSecondary} />
+              <Text style={[styles.tabText, { color: activeTab === "show_qr" ? "#fff" : colors.textSecondary }]}>
+                My QR
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.tab, activeTab === "scan_qr" && [styles.activeTab, { backgroundColor: colors.accent }]]}
+              onPress={() => {
+                setActiveTab("scan_qr");
+                setScanned(false);
+                if (!permission?.granted) {
+                  requestPermission();
+                }
+              }}
+              activeOpacity={0.8}
+            >
+              <Feather name="camera" size={14} color={activeTab === "scan_qr" ? "#fff" : colors.textSecondary} />
+              <Text style={[styles.tabText, { color: activeTab === "scan_qr" ? "#fff" : colors.textSecondary }]}>
+                Scan QR
               </Text>
             </TouchableOpacity>
 
@@ -258,7 +317,7 @@ export default function WifiSyncModal({
             >
               <Feather name="wifi" size={14} color={activeTab === "wifi" ? "#fff" : colors.textSecondary} />
               <Text style={[styles.tabText, { color: activeTab === "wifi" ? "#fff" : colors.textSecondary }]}>
-                Same Wi-Fi
+                Wi-Fi IP
               </Text>
             </TouchableOpacity>
 
@@ -269,27 +328,35 @@ export default function WifiSyncModal({
             >
               <Feather name="download" size={14} color={activeTab === "import" ? "#fff" : colors.textSecondary} />
               <Text style={[styles.tabText, { color: activeTab === "import" ? "#fff" : colors.textSecondary }]}>
-                Receive
+                Code
               </Text>
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.contentScroll} showsVerticalScrollIndicator={false}>
-            {/* TAB 1: QR CODE FAST SYNC */}
-            {activeTab === "qr" && (
+          {/* TAB 1: SHOW QR CODE */}
+          {activeTab === "show_qr" && (
+            <ScrollView style={styles.contentScroll} showsVerticalScrollIndicator={false}>
               <View style={styles.qrSection}>
                 <GlassCard style={styles.qrCard}>
                   <Text style={styles.qrHeading}>Scan to Sync Flat Data</Text>
                   <Text style={styles.qrSub}>
-                    Have your roommate scan this QR code or copy the sync code below:
+                    Have your roommate tap "Scan QR" and point their camera at this screen:
                   </Text>
 
-                  {qrDataUrl ? (
+                  {qrPayload ? (
                     <View style={styles.qrImageWrap}>
-                      <Image source={{ uri: qrDataUrl }} style={styles.qrImage} resizeMode="contain" />
+                      <QRCode
+                        value={qrPayload}
+                        size={210}
+                        color="#0B1220"
+                        backgroundColor="#FFFFFF"
+                        ecl="M"
+                      />
                     </View>
                   ) : (
-                    <ActivityIndicator color={colors.accent} style={{ marginVertical: 30 }} />
+                    <View style={{ height: 210, justifyContent: "center", alignItems: "center" }}>
+                      <ActivityIndicator color={colors.accent} size="large" />
+                    </View>
                   )}
                 </GlassCard>
 
@@ -300,130 +367,181 @@ export default function WifiSyncModal({
                   />
 
                   <GlassButton
-                    label="📤 Share File (WhatsApp / AirDrop / Nearby)"
+                    label="📤 Share Backup File (WhatsApp / Drive)"
                     onPress={handleShareBackupFile}
                     variant="glass"
                   />
                 </View>
               </View>
-            )}
+            </ScrollView>
+          )}
 
-            {/* TAB 2: SAME WI-FI PEER SYNC */}
-            {activeTab === "wifi" && (
-              <View>
-                <GlassCard style={styles.infoCard}>
-                  <View style={styles.infoRow}>
-                    <Feather name="smartphone" size={16} color={colors.accent} />
-                    <Text style={styles.infoTitle}>Your Phone's Wi-Fi IP:</Text>
-                  </View>
-                  <Text style={[styles.ipDisplay, { color: colors.accent }]}>
-                    {localIp || "Checking connection..."}
+          {/* TAB 2: LIVE CAMERA QR SCANNER */}
+          {activeTab === "scan_qr" && (
+            <View style={styles.scannerContainer}>
+              {!permission?.granted ? (
+                <View style={styles.permissionBox}>
+                  <Feather name="camera-off" size={40} color={colors.accent} />
+                  <Text style={[styles.permTitle, { color: colors.textPrimary }]}>Camera Access Required</Text>
+                  <Text style={[styles.permSub, { color: colors.textSecondary }]}>
+                    FlatSplit needs camera access to scan your roommate's sync QR code.
                   </Text>
-                  <Text style={styles.infoHint}>
-                    Both phones should be connected to the same Wi-Fi network (or one phone's hotspot).
-                  </Text>
-                </GlassCard>
-
-                {/* Subnet Auto-Discovery */}
-                <View style={styles.section}>
                   <GlassButton
-                    label={isScanning ? "Scanning Wi-Fi..." : "🔍 Auto-Find Roommates on Wi-Fi"}
-                    onPress={handleScanSubnet}
-                    loading={isScanning}
-                    style={{ marginBottom: 12 }}
+                    label="Grant Camera Permission"
+                    onPress={requestPermission}
+                    style={{ marginTop: 16 }}
                   />
+                </View>
+              ) : (
+                <View style={styles.cameraWrap}>
+                  <CameraView
+                    style={StyleSheet.absoluteFill}
+                    facing="back"
+                    barcodeScannerSettings={{
+                      barcodeTypes: ["qr"],
+                    }}
+                    onBarcodeScanned={scanned ? undefined : handleBarcodeScanned}
+                  />
+                  {/* Scanner Reticle Overlay */}
+                  <View style={styles.overlay}>
+                    <View style={styles.scanFrame}>
+                      <View style={[styles.corner, styles.topLeft, { borderColor: colors.accent }]} />
+                      <View style={[styles.corner, styles.topRight, { borderColor: colors.accent }]} />
+                      <View style={[styles.corner, styles.bottomLeft, { borderColor: colors.accent }]} />
+                      <View style={[styles.corner, styles.bottomRight, { borderColor: colors.accent }]} />
+                    </View>
+                    <Text style={styles.scanHint}>Align roommate's QR code inside the box</Text>
+                  </View>
 
-                  {syncStatus && (
-                    <Text style={[styles.statusText, { color: colors.textSecondary }]}>
-                      {syncStatus}
-                    </Text>
-                  )}
-
-                  {discoveredPeers.length > 0 && (
-                    <View style={styles.peerList}>
-                      <Text style={styles.sectionLabel}>Discovered Roommates:</Text>
-                      {discoveredPeers.map((ip) => (
-                        <TouchableOpacity
-                          key={ip}
-                          style={[styles.peerItem, { backgroundColor: colors.input, borderColor: colors.inputBorder }]}
-                          onPress={() => handleDirectIpSync(ip)}
-                          activeOpacity={0.7}
-                        >
-                          <View style={styles.peerInfo}>
-                            <Feather name="hard-drive" size={16} color={colors.accent} />
-                            <Text style={[styles.peerIp, { color: colors.textPrimary }]}>{ip}</Text>
-                          </View>
-                          <Text style={[styles.peerAction, { color: colors.accent }]}>Sync Now →</Text>
-                        </TouchableOpacity>
-                      ))}
+                  {scanned && (
+                    <View style={styles.rescanWrap}>
+                      <GlassButton
+                        label="Scan Again"
+                        onPress={() => setScanned(false)}
+                        style={{ alignSelf: "center" }}
+                      />
                     </View>
                   )}
                 </View>
+              )}
+            </View>
+          )}
 
-                {/* Manual IP Connect */}
-                <View style={styles.section}>
-                  <Text style={styles.sectionLabel}>Or Connect via Roommate's IP:</Text>
-                  <View style={styles.ipInputRow}>
-                    <TextInput
-                      style={[
-                        styles.ipInput,
-                        { backgroundColor: colors.input, borderColor: colors.inputBorder, color: colors.textPrimary },
-                      ]}
-                      placeholder="e.g. 192.168.1.50"
-                      placeholderTextColor={colors.textTertiary}
-                      value={targetIp}
-                      onChangeText={setTargetIp}
-                      keyboardType="numbers-and-punctuation"
-                      autoCapitalize="none"
-                    />
-                    <GlassButton
-                      label="Sync"
-                      onPress={() => handleDirectIpSync()}
-                      loading={isSyncing}
-                      style={styles.syncBtn}
-                    />
-                  </View>
+          {/* TAB 3: SAME WI-FI PEER SYNC */}
+          {activeTab === "wifi" && (
+            <ScrollView style={styles.contentScroll} showsVerticalScrollIndicator={false}>
+              <GlassCard style={styles.infoCard}>
+                <View style={styles.infoRow}>
+                  <Feather name="smartphone" size={16} color={colors.accent} />
+                  <Text style={styles.infoTitle}>Your Phone's Wi-Fi IP:</Text>
                 </View>
-              </View>
-            )}
+                <Text style={[styles.ipDisplay, { color: colors.accent }]}>
+                  {localIp || "Checking connection..."}
+                </Text>
+                <Text style={styles.infoHint}>
+                  Both phones should be connected to the same Wi-Fi network (or one phone's personal hotspot).
+                </Text>
+              </GlassCard>
 
-            {/* TAB 3: RECEIVE / IMPORT DATA */}
-            {activeTab === "import" && (
-              <View>
-                <Text style={styles.sectionLabel}>Paste Sync Code Received from Roommate:</Text>
-                <TextInput
-                  style={[
-                    styles.textArea,
-                    { backgroundColor: colors.input, borderColor: colors.inputBorder, color: colors.textPrimary },
-                  ]}
-                  placeholder="Paste sync code or JSON here..."
-                  placeholderTextColor={colors.textTertiary}
-                  value={importText}
-                  onChangeText={setImportText}
-                  multiline
-                  numberOfLines={4}
+              {/* Subnet Auto-Discovery */}
+              <View style={styles.section}>
+                <GlassButton
+                  label={isScanning ? "Scanning Wi-Fi..." : "🔍 Auto-Find Roommates on Wi-Fi"}
+                  onPress={handleScanSubnet}
+                  loading={isScanning}
+                  style={{ marginBottom: 12 }}
                 />
 
-                <View style={styles.importBtnRow}>
-                  <TouchableOpacity
-                    style={[styles.pasteBtn, { backgroundColor: colors.input, borderColor: colors.inputBorder }]}
-                    onPress={handlePasteFromClipboard}
-                    activeOpacity={0.7}
-                  >
-                    <Feather name="clipboard" size={14} color={colors.accent} />
-                    <Text style={[styles.pasteBtnText, { color: colors.accent }]}>Paste Clipboard</Text>
-                  </TouchableOpacity>
+                {syncStatus && (
+                  <Text style={[styles.statusText, { color: colors.textSecondary }]}>
+                    {syncStatus}
+                  </Text>
+                )}
 
+                {discoveredPeers.length > 0 && (
+                  <View style={styles.peerList}>
+                    <Text style={styles.sectionLabel}>Discovered Roommates:</Text>
+                    {discoveredPeers.map((ip) => (
+                      <TouchableOpacity
+                        key={ip}
+                        style={[styles.peerItem, { backgroundColor: colors.input, borderColor: colors.inputBorder }]}
+                        onPress={() => handleDirectIpSync(ip)}
+                        activeOpacity={0.7}
+                      >
+                        <View style={styles.peerInfo}>
+                          <Feather name="hard-drive" size={16} color={colors.accent} />
+                          <Text style={[styles.peerIp, { color: colors.textPrimary }]}>{ip}</Text>
+                        </View>
+                        <Text style={[styles.peerAction, { color: colors.accent }]}>Sync Now →</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
+
+              {/* Manual IP Connect */}
+              <View style={styles.section}>
+                <Text style={styles.sectionLabel}>Or Connect via Roommate's IP:</Text>
+                <View style={styles.ipInputRow}>
+                  <TextInput
+                    style={[
+                      styles.ipInput,
+                      { backgroundColor: colors.input, borderColor: colors.inputBorder, color: colors.textPrimary },
+                    ]}
+                    placeholder="e.g. 192.168.1.50"
+                    placeholderTextColor={colors.textTertiary}
+                    value={targetIp}
+                    onChangeText={setTargetIp}
+                    keyboardType="numbers-and-punctuation"
+                    autoCapitalize="none"
+                  />
                   <GlassButton
-                    label="Merge & Sync Data"
-                    onPress={() => handleApplyImport()}
+                    label="Sync"
+                    onPress={() => handleDirectIpSync()}
                     loading={isSyncing}
-                    style={{ flex: 1 }}
+                    style={styles.syncBtn}
                   />
                 </View>
               </View>
-            )}
-          </ScrollView>
+            </ScrollView>
+          )}
+
+          {/* TAB 4: RECEIVE / IMPORT DATA */}
+          {activeTab === "import" && (
+            <ScrollView style={styles.contentScroll} showsVerticalScrollIndicator={false}>
+              <Text style={styles.sectionLabel}>Paste Sync Code Received from Roommate:</Text>
+              <TextInput
+                style={[
+                  styles.textArea,
+                  { backgroundColor: colors.input, borderColor: colors.inputBorder, color: colors.textPrimary },
+                ]}
+                placeholder="Paste sync code or JSON here..."
+                placeholderTextColor={colors.textTertiary}
+                value={importText}
+                onChangeText={setImportText}
+                multiline
+                numberOfLines={4}
+              />
+
+              <View style={styles.importBtnRow}>
+                <TouchableOpacity
+                  style={[styles.pasteBtn, { backgroundColor: colors.input, borderColor: colors.inputBorder }]}
+                  onPress={handlePasteFromClipboard}
+                  activeOpacity={0.7}
+                >
+                  <Feather name="clipboard" size={14} color={colors.accent} />
+                  <Text style={[styles.pasteBtnText, { color: colors.accent }]}>Paste Clipboard</Text>
+                </TouchableOpacity>
+
+                <GlassButton
+                  label="Merge & Sync"
+                  onPress={() => handleApplyImport()}
+                  loading={isSyncing}
+                  style={{ flex: 1 }}
+                />
+              </View>
+            </ScrollView>
+          )}
         </View>
       </View>
     </Modal>
@@ -441,7 +559,7 @@ function makeStyles(c: Palette) {
       borderTopLeftRadius: 28,
       borderTopRightRadius: 28,
       borderTopWidth: 1,
-      maxHeight: "90%",
+      maxHeight: "92%",
       padding: 20,
     },
     header: {
@@ -464,7 +582,7 @@ function makeStyles(c: Palette) {
       justifyContent: "center",
     },
     title: {
-      fontSize: 18,
+      fontSize: 17,
       fontWeight: "800",
       color: c.textPrimary,
     },
@@ -504,7 +622,7 @@ function makeStyles(c: Palette) {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "center",
-      gap: 6,
+      gap: 5,
       paddingVertical: 8,
       borderRadius: 10,
     },
@@ -516,7 +634,7 @@ function makeStyles(c: Palette) {
       elevation: 2,
     },
     tabText: {
-      fontSize: 12,
+      fontSize: 11,
       fontWeight: "700",
     },
     contentScroll: {
@@ -543,17 +661,107 @@ function makeStyles(c: Palette) {
     },
     qrImageWrap: {
       backgroundColor: "#FFFFFF",
-      padding: 12,
+      padding: 14,
       borderRadius: 18,
+      alignItems: "center",
+      justifyContent: "center",
       shadowColor: "#000",
       shadowOffset: { width: 0, height: 4 },
       shadowOpacity: 0.15,
       shadowRadius: 8,
       elevation: 4,
     },
-    qrImage: {
-      width: 190,
-      height: 190,
+    scannerContainer: {
+      height: 380,
+      borderRadius: 20,
+      overflow: "hidden",
+      backgroundColor: "#000000",
+    },
+    permissionBox: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      padding: 24,
+    },
+    permTitle: {
+      fontSize: 17,
+      fontWeight: "800",
+      marginTop: 14,
+      marginBottom: 6,
+    },
+    permSub: {
+      fontSize: 13,
+      textAlign: "center",
+      lineHeight: 18,
+    },
+    cameraWrap: {
+      flex: 1,
+      position: "relative",
+    },
+    overlay: {
+      position: "absolute",
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: "rgba(0,0,0,0.35)",
+    },
+    scanFrame: {
+      width: 220,
+      height: 220,
+      position: "relative",
+    },
+    corner: {
+      position: "absolute",
+      width: 24,
+      height: 24,
+      borderWidth: 4,
+    },
+    topLeft: {
+      top: 0,
+      left: 0,
+      borderRightWidth: 0,
+      borderBottomWidth: 0,
+      borderTopLeftRadius: 10,
+    },
+    topRight: {
+      top: 0,
+      right: 0,
+      borderLeftWidth: 0,
+      borderBottomWidth: 0,
+      borderTopRightRadius: 10,
+    },
+    bottomLeft: {
+      bottom: 0,
+      left: 0,
+      borderRightWidth: 0,
+      borderTopWidth: 0,
+      borderBottomLeftRadius: 10,
+    },
+    bottomRight: {
+      bottom: 0,
+      right: 0,
+      borderLeftWidth: 0,
+      borderTopWidth: 0,
+      borderBottomRightRadius: 10,
+    },
+    scanHint: {
+      color: "#FFFFFF",
+      fontSize: 12,
+      fontWeight: "700",
+      marginTop: 20,
+      textShadowColor: "rgba(0,0,0,0.8)",
+      textShadowOffset: { width: 0, height: 1 },
+      textShadowRadius: 3,
+    },
+    rescanWrap: {
+      position: "absolute",
+      bottom: 20,
+      left: 0,
+      right: 0,
+      alignItems: "center",
     },
     infoCard: {
       padding: 14,
