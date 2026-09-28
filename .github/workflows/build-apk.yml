@@ -1,0 +1,73 @@
+name: Build & Release Standalone Android APK
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name:  checkout repository
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: ☕ Setup Java JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: 📱 Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: 📦 Install dependencies
+        working-directory: mobile
+        run: npm ci
+
+      - name: 🚀 Expo Prebuild
+        working-directory: mobile
+        run: npx expo prebuild --platform android --clean
+
+      - name: 🔨 Build Release APK
+        working-directory: mobile/android
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: 📤 Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlatSplit-APK
+          path: mobile/android/app/build/outputs/apk/release/app-release.apk
+
+      - name: 🏷️ Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }} - FlatSplit Offline
+          body: |
+            ### 🚀 FlatSplit v1.0.0 Standalone Offline APK
+            
+            #### ✨ Key Features:
+            - **100% Offline-First Architecture**: No database or backend server required. Local AsyncStorage persistence.
+            - **Instant Vector QR Codes**: Crisp QR generation via `react-native-qrcode-svg`.
+            - **Live In-App Camera QR Scanner**: Scan roommate QR codes directly with `expo-camera`.
+            - **Peer-to-Peer Wi-Fi Sync**: Sync flats across devices on the same Wi-Fi network or hotspot.
+            - **Avatar & Name Profiles**: Instant profile setup without email/password friction.
+            - **Expense & Debt Simplification**: Split equally, exactly, or by percentage.
+            
+            #### 📦 Download:
+            Download `FlatSplit.apk` below and install directly onto your Android phone.
+          files: mobile/android/app/build/outputs/apk/release/app-release.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
